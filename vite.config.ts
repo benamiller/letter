@@ -33,8 +33,10 @@ export default defineConfig({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+				navigateFallback: null,
 				runtimeCaching: [
 					{
+						// Google Fonts CSS — 1 year cache
 						urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
 						handler: 'CacheFirst',
 						options: {
@@ -43,11 +45,21 @@ export default defineConfig({
 						}
 					},
 					{
+						// Google Fonts files — 1 year cache
 						urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
 						handler: 'CacheFirst',
 						options: {
 							cacheName: 'gstatic-fonts-cache',
 							expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 }
+						}
+					},
+					{
+						// Archive pages — stale while revalidate (read offline, fresh when possible)
+						urlPattern: /^https?:\/\/[^/]+\/archive.*/i,
+						handler: 'StaleWhileRevalidate',
+						options: {
+							cacheName: 'archive-cache',
+							expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 90 }
 						}
 					}
 				]

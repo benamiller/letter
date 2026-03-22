@@ -119,3 +119,48 @@ body {
 .fade-in-slow {
 	animation: fadeInSlow var(--transition-slow) forwards;
 }
+
+/* Mobile — tighter margins, same aesthetic */
+@media (max-width: 480px) {
+	:root {
+		--side-padding: 1.25rem;
+	}
+
+	html {
+		font-size: 15px;
+	}
+}
+
+/* Prevent iOS tap highlight */
+a, button {
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* iOS safe areas for PWA */
+body {
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Prevent overscroll flash on iOS */
+html {
+	overscroll-behavior: none;
+}
+
+/* Page transitions */
+@view-transition {
+	navigation: auto;
+}
+
+::view-transition-old(root) {
+	animation: 400ms ease both fadeOut;
+}
+
+::view-transition-new(root) {
+	animation: 600ms ease both fadeIn;
+}
+
+@keyframes fadeOut {
+	from { opacity: 1; }
+	to { opacity: 0; }
+}
