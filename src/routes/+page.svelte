@@ -1,19 +1,42 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { signOut } from '$lib/auth';
 	import { goto } from '$app/navigation';
+	import { supabase } from '$lib/supabase';
+	import { subscribeToNewLetters, type Letter } from '$lib/stores/letter';
 
 	export let data: PageData;
 
+	let letter = data.letter;
 	let visible = false;
+	let arriving = false;
 	let showNav = false;
 	let mouseTimeout: ReturnType<typeof setTimeout>;
+	let realtimeChannel: ReturnType<typeof subscribeToNewLetters> | null = null;
 
-	onMount(() => {
-		// Delayed reveal — the letter arrives, it doesn't snap in
+	onMount(async () => {
 		setTimeout(() => { visible = true; }, 300);
+
+		const { data: { session } } = await supabase.auth.getSession();
+		if (!session) return;
+
+		// Listen for new letter arriving in real time
+		realtimeChannel = subscribeToNewLetters(session.user.id, (newLetter: Letter) => {
+			arriving = true;
+			setTimeout(() => {
+				letter = newLetter;
+				arriving = false;
+			}, 600);
+		});
+	});
+
+	onDestroy(() => {
+		if (realtimeChannel) {
+			supabase.removeChannel(realtimeChannel);
+		}
+		clearTimeout(mouseTimeout);
 	});
 
 	function handleMouseMove() {
@@ -40,16 +63,16 @@
 <svelte:window on:mousemove={handleMouseMove} />
 
 <main class="reader" role="main">
-	{#if data.letter && visible}
-		<article class="letter-container" in:fade={{ duration: 1200, delay: 100 }}>
+	{#if letter && visible && !arriving}
+		<article class="letter-container" in:fade={{ duration: 1400, delay: 100 }}>
 			<header class="letter-header">
-				<time class="letter-date ui-text" datetime={data.letter.delivered_at}>
-					{formatDate(data.letter.delivered_at)}
+				<time class="letter-date ui-text" datetime={letter.delivered_at}>
+					{formatDate(letter.delivered_at)}
 				</time>
 			</header>
 
 			<div class="letter-body">
-				{#each data.letter.content.split('\n\n') as paragraph}
+				{#each letter.content.split('\n\n') as paragraph}
 					{#if paragraph.trim()}
 						<p>{paragraph.trim()}</p>
 					{/if}
@@ -60,14 +83,14 @@
 				<span class="ui-text signature">— Nia</span>
 			</footer>
 		</article>
-	{:else if !data.letter && visible}
+	{:else if !letter && visible}
 		<div class="no-letter" in:fade={{ duration: 800 }}>
-			<p class="ui-text">Your first letter arrives on Sunday.</p>
+			<p class="waiting ui-text">Your first letter arrives on Sunday.</p>
 			<a href="/share" class="share-link ui-text">Share something with Nia →</a>
 		</div>
 	{/if}
 
-	<!-- Minimal nav — fades in on hover, disappears -->
+	<!-- Ghost nav -->
 	<nav class="ghost-nav ui-text" class:visible={showNav} aria-label="Navigation">
 		<a href="/archive">archive</a>
 		<a href="/share">share</a>
@@ -97,8 +120,8 @@
 	}
 
 	.letter-date {
-		font-size: 0.75rem;
-		letter-spacing: 0.1em;
+		font-size: 0.6875rem;
+		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		color: var(--text-muted);
 	}
@@ -123,7 +146,7 @@
 		align-items: center;
 	}
 
-	.no-letter p {
+	.waiting {
 		font-size: 0.875rem;
 		color: var(--text-muted);
 		letter-spacing: 0.06em;
@@ -141,7 +164,6 @@
 		opacity: 0.7;
 	}
 
-	/* Ghost nav — barely there */
 	.ghost-nav {
 		position: fixed;
 		bottom: 2rem;
