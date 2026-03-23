@@ -92,7 +92,7 @@ async function generateLetter(entries: Entry[], apiKey: string): Promise<string>
   return data.content[0].text;
 }
 
-Deno.serve(async (req: Request) => {
+export async function handler(req: Request): Promise<Response> {
   // Only allow POST
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
@@ -104,9 +104,10 @@ Deno.serve(async (req: Request) => {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')!;
+  const env = typeof Deno !== 'undefined' ? Deno.env : { get: (k: string) => process.env[k] };
+  const supabaseUrl = env.get('SUPABASE_URL')!;
+  const serviceKey = env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const anthropicKey = env.get('ANTHROPIC_API_KEY')!;
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
@@ -220,4 +221,9 @@ Deno.serve(async (req: Request) => {
     status: 200,
     headers: { 'Content-Type': 'application/json' }
   });
-});
+}
+
+// Register with Deno runtime when available
+if (typeof Deno !== 'undefined') {
+  Deno.serve(handler);
+}

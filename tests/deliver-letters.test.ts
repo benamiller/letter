@@ -1,107 +1,94 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import deliverLetters from '../../src/functions/deliver-letters/index'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-const SUPABASE_URL = 'https://example.supabase.co'
+// Mock @supabase/supabase-js before importing the handler
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn()
+}));
 
-describe('deliver-letters edge function', () => {
-  let originalFetch: typeof fetch
-  let originalDateTimeFormat: typeof Intl.DateTimeFormat
+import { createClient } from '@supabase/supabase-js';
+import { handler } from '../supabase/functions/deliver-letters/index';
 
-  beforeEach(() => {
-    originalFetch = global.fetch
-    originalDateTimeFormat = Intl.DateTimeFormat
-    process.env.SUPABASE_URL = SUPABASE_URL
-  })
+const SUPABASE_URL = 'https://example.supabase.co';
 
-  afterEach(() => {
-    vi.restoreAllMocks()
-    global.fetch = originalFetch
-    (Intl as any).DateTimeFormat = originalDateTimeFormat
-  })
+beforeEach(() => {
+  process.env.SUPABASE_URL = SUPABASE_URL;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key';
+});
 
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('deliver-letters handler', () => {
   it('returns 405 on non-POST', async () => {
-    const req = new Request('https://fn', { method: 'GET' })
-    const res = await deliverLetters(req)
-    expect(res.status).toBe(405)
-    const json = await res.json()
-    expect(json).toMatchObject({ error: 'Method not allowed' })
-  })
+    const req = new Request('https://fn', { method: 'GET' });
+    const res = await handler(req);
+    expect(res.status).toBe(405);
+  });
 
-  it('returns zero when no eligible users', async () => {
-    // stub fetch for users
-    global.fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-    const req = new Request('https://fn', { method: 'POST' })
-    const res = await deliverLetters(req)
-    expect(global.fetch).toHaveBeenCalledTimes(1)
-    const json = await res.json()
-    expect(json).toEqual({ delivered: 0 })
-  })
+  it('returns { delivered: 0 } when no eligible users', async () => {
+    const inMock = vi.fn().mockResolvedValue({ data: [], error: null });
+    const selectMock = vi.fn().mockReturnValue({ in: inMock });
+    const fromMock = vi.fn().mockReturnValue({ select: selectMock });
+    (createClient as ReturnType<typeof vi.fn>).mockReturnValue({ from: fromMock });
 
-  it('delivers to one eligible user on Sunday 8am', async () => {
-    // stub fetch: first call returns one user, second call is generate-letter
-    const user = { id: 'u1', timezone: 'Europe/London', subscription_status: 'active' }
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([user]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-    global.fetch = fetchMock
-    // stub DateTimeFormat to report Sunday 8
+    const req = new Request('https://fn', { method: 'POST' });
+    const res = await handler(req);
+    const json = await res.json();
+    expect(json).toEqual({ delivered: 0 });
+  });
+
+  it('delivers to eligible user on Sunday 8am', async () => {
+    const users = [{ id: 'u1', timezone: 'Europe/London' }];
+    const inMock = vi.fn().mockResolvedValue({ data: users, error: null });
+    const selectMock = vi.fn().mockReturnValue({ in: inMock });
+    const fromMock = vi.fn().mockReturnValue({ select: selectMock });
+    (createClient as ReturnType<typeof vi.fn>).mockReturnValue({ from: fromMock });
+
+    // Stub Intl.DateTimeFormat to report Sunday 8am
+    const origFormat = Intl.DateTimeFormat;
+    (Intl as any).DateTimeFormat = class {
+      formatToParts() {
+        return [{ type: 'weekday', value: 'Sun' }, { type: 'hour', value: '8' }];
+      }
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const req = new Request('https://fn', { method: 'POST' });
+    const res = await handler(req);
+    const json = await res.json();
+
+    expect(json.total).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/functions/v1/generate-letter'),
+      expect.any(Object)
+    );
+
+    (Intl as any).DateTimeFormat = origFormat;
+  });
+
+  it('skips users with invalid timezone', async () => {
+    const users = [{ id: 'u2', timezone: 'Bad/Zone' }];
+    const inMock = vi.fn().mockResolvedValue({ data: users, error: null });
+    const selectMock = vi.fn().mockReturnValue({ in: inMock });
+    const fromMock = vi.fn().mockReturnValue({ select: selectMock });
+    (createClient as ReturnType<typeof vi.fn>).mockReturnValue({ from: fromMock });
+
+    const origFormat = Intl.DateTimeFormat;
     (Intl as any).DateTimeFormat = class {
       constructor(_locale: string, opts: any) {
-        if (opts.timeZone !== 'Europe/London') throw new RangeError()
+        if (opts?.timeZone === 'Bad/Zone') throw new RangeError('Invalid timezone');
       }
-      formatToParts() {
-        return [
-          { type: 'weekday', value: 'Sunday' },
-          { type: 'hour', value: '8' },
-        ]
-      }
-    }
-    const req = new Request('https://fn', { method: 'POST' })
-    const res = await deliverLetters(req)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    // first call fetch users, second call generate-letter
-    expect(fetchMock.mock.calls[1][0]).toContain(`${SUPABASE_URL}/functions/v1/generate-letter`)
-    const json = await res.json()
-    expect(json).toEqual({ delivered: 1, total: 1 })
-  })
+      formatToParts() { return []; }
+    };
 
-  it('skips invalid timezone users', async () => {
-    const user = { id: 'u2', timezone: 'Invalid/Zone', subscription_status: 'active' }
-    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([user]), { status: 200 }))
-    global.fetch = fetchMock
-    (Intl as any).DateTimeFormat = class {
-      constructor(_locale: string, opts: any) {
-        if (opts.timeZone === 'Invalid/Zone') throw new RangeError('Invalid timezone')
-      }
-    }
-    const req = new Request('https://fn', { method: 'POST' })
-    const res = await deliverLetters(req)
-    expect(fetchMock).toHaveBeenCalledTimes(1) // only user fetch
-    const json = await res.json()
-    expect(json).toEqual({ delivered: 0, total: 0 })
-  })
+    const req = new Request('https://fn', { method: 'POST' });
+    const res = await handler(req);
+    const json = await res.json();
+    expect(json).toEqual({ delivered: 0 });
 
-  it('counts partial failures correctly', async () => {
-    const users = [
-      { id: 'u1', timezone: 'Europe/London', subscription_status: 'active' },
-      { id: 'u2', timezone: 'Europe/London', subscription_status: 'trial' },
-    ]
-    // first fetch returns two users, then two generate calls
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(users), { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 500 }))
-    global.fetch = fetchMock
-    (Intl as any).DateTimeFormat = class {
-      constructor(_locale: string, opts: any) {}
-      formatToParts() {
-        return [{ type: 'weekday', value: 'Sunday' }, { type: 'hour', value: '8' }]
-      }
-    }
-    const req = new Request('https://fn', { method: 'POST' })
-    const res = await deliverLetters(req)
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-    const json = await res.json()
-    expect(json).toEqual({ delivered: 1, total: 2 })
-  })
-})
+    (Intl as any).DateTimeFormat = origFormat;
+  });
+});

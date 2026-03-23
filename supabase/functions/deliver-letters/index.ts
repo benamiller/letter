@@ -4,13 +4,14 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-Deno.serve(async (req: Request) => {
+export async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const env = typeof Deno !== 'undefined' ? Deno.env : { get: (k: string) => process.env[k] };
+  const supabaseUrl = env.get('SUPABASE_URL')!;
+  const serviceKey = env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
   const now = new Date();
@@ -78,4 +79,9 @@ Deno.serve(async (req: Request) => {
     status: 200,
     headers: { 'Content-Type': 'application/json' }
   });
-});
+}
+
+// Register with Deno runtime when available
+if (typeof Deno !== 'undefined') {
+  Deno.serve(handler);
+}

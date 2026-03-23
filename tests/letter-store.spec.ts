@@ -39,11 +39,9 @@ describe('Letter Store', () => {
 
     (supabase.from as unknown as vi.Mock).mockReturnValue({ select: selectMock });
 
+    // Subscribe AFTER setup — initial value is emitted first (false/null from beforeEach)
     const loadingStates: boolean[] = [];
     letterLoading.subscribe((val) => loadingStates.push(val));
-
-    const letters: (Letter | null)[] = [];
-    currentLetter.subscribe((val) => letters.push(val));
 
     await fetchLatestLetter('user1');
 
@@ -53,8 +51,12 @@ describe('Letter Store', () => {
     expect(orderMock).toHaveBeenCalledWith('delivered_at', { ascending: false });
     expect(limitMock).toHaveBeenCalledWith(1);
 
-    expect(loadingStates).toEqual([true, false]);
-    expect(letters[letters.length - 1]).toEqual(fakeData);
+    // Svelte stores emit current value on subscribe, so states are [false(initial), true, false]
+    expect(loadingStates).toEqual([false, true, false]);
+
+    let finalLetter: Letter | null = null;
+    currentLetter.subscribe((val) => { finalLetter = val; });
+    expect(finalLetter).toEqual(fakeData);
   });
 
   it('fetchLatestLetter handles no data', async () => {
@@ -69,13 +71,12 @@ describe('Letter Store', () => {
     const loadingStates: boolean[] = [];
     letterLoading.subscribe((val) => loadingStates.push(val));
 
-    const letters: (Letter | null)[] = [];
-    currentLetter.subscribe((val) => letters.push(val));
-
     await fetchLatestLetter('user1');
 
-    expect(loadingStates).toEqual([true, false]);
-    expect(letters[letters.length - 1]).toBeNull();
+    expect(loadingStates).toEqual([false, true, false]);
+    let finalLetter: Letter | null = null;
+    currentLetter.subscribe((val) => { finalLetter = val; });
+    expect(finalLetter).toBeNull();
   });
 
   it('subscribeToNewLetters binds and triggers onNew', () => {
@@ -92,7 +93,7 @@ describe('Letter Store', () => {
         capturedHandler = handler;
         return channelStub;
       }),
-      subscribe: vi.fn(() => 'subscribed')
+      subscribe: vi.fn(function() { return channelStub; })
     };
 
     (supabase.channel as unknown as vi.Mock).mockReturnValue(channelStub);
