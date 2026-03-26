@@ -37,3 +37,4 @@ VALUES (
   now(),
   date_trunc('week', current_date)::date
 );
+
