@@ -8,7 +8,8 @@ vi.mock('$lib/supabase', () => ({
 
 import { supabase } from '$lib/supabase';
 import { callHandler } from '../../__mocks__/sveltekit-error-helper';
-import { POST, verifyWebhook } from '../../../src/routes/api/stripe/webhook/+server';
+import { POST } from '../../../src/routes/api/stripe/webhook/+server';
+import { verifyWebhook } from '../../../src/lib/stripe-webhook';
 
 const SECRET = 'whsec_test_mock'; // matches env mock
 
