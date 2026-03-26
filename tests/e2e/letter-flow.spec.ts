@@ -48,6 +48,10 @@ test('full letter reading flow', async ({ request, page }) => {
   const letter = page.locator('.letter-container')
   await expect(letter).toBeVisible({ timeout: 10000 })
 
+  // Font — --font-letter is declared in app.css so this works without network
+  const fontFamily = await page.locator('.letter-body').evaluate(el => getComputedStyle(el).fontFamily)
+  expect(fontFamily).toMatch(/lora/i)
+
   // Ghost nav appears on mouse move, hides after 2s
   const nav = page.locator('.ghost-nav')
   await page.mouse.move(100, 100)
