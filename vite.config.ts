@@ -1,4 +1,4 @@
-import { sveltekit } from '@sveltejs/vite-plugin-svelte';
+import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -16,8 +16,8 @@ export default defineConfig({
 				background_color: '#0d0c0b',
 				display: 'standalone',
 				orientation: 'portrait',
-				scope: '/',
-				start_url: '/',
+				scope: '/letter/',
+				start_url: '/letter/',
 				icons: [
 					{
 						src: '/icons/icon-192.png',

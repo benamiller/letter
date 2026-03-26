@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET } from '$env/static/private';
 import { supabase } from '$lib/supabase';
 
-export async function verifyWebhook(payload: string, signature: string, secret: string): Promise<boolean> {
+async function verifyWebhook(payload: string, signature: string, secret: string): Promise<boolean> {
 	const parts = signature.split(',').reduce<Record<string, string>>((acc, part) => {
 		const [k, v] = part.split('=');
 		acc[k] = v;
