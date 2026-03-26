@@ -43,19 +43,34 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
       - run: npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit
 
-      - run: npm run test:e2e
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Export local Supabase credentials
+        id: supabase
+        run: |
+          STATUS=$(supabase status --output json)
+          echo "url=$(echo $STATUS | jq -r '.API_URL')" >> $GITHUB_OUTPUT
+          echo "anon_key=$(echo $STATUS | jq -r '.ANON_KEY')" >> $GITHUB_OUTPUT
+
+      - name: Run E2E tests
+        run: npm run test:e2e
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ steps.supabase.outputs.url }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ steps.supabase.outputs.anon_key }}
+          STRIPE_SECRET_KEY: sk_test_e2e_placeholder
+          STRIPE_WEBHOOK_SECRET: whsec_e2e_placeholder
+          ELEVENLABS_API_KEY: sk_e2e_placeholder
+          ANTHROPIC_API_KEY: sk_e2e_placeholder
 
       - uses: actions/upload-artifact@v4
         if: failure()
